@@ -88,6 +88,18 @@ export default function App() {
     resetSession(category)
   }, [category, resetSession])
 
+  const handleReviewMissed = useCallback((missedIndices) => {
+    setDeck(shuffleArray(missedIndices))
+    setPos(0)
+    setSelected(new Set())
+    setScore(0)
+    setAnswered(0)
+    setHistory({})
+    setPhase('quiz')
+    setTimeLeft(QUESTION_SECONDS)
+    submittingRef.current = false
+  }, [])
+
   const toggleOption = (optIdx) => {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -292,13 +304,16 @@ export default function App() {
           score={score}
           answered={answered}
           onRestart={handleRestart}
+          onReviewMissed={handleReviewMissed}
         />
       )}
     </div>
   )
 }
 
-function Results({ deck, history, score, answered, onRestart }) {
+function Results({ deck, history, score, answered, onRestart, onReviewMissed }) {
+  const [filter, setFilter] = useState('all') // 'all' | 'missed'
+
   const graded = deck.map((qIndex) => ({
     qIndex,
     q: questions[qIndex],
@@ -307,6 +322,7 @@ function Results({ deck, history, score, answered, onRestart }) {
   const missed = graded.filter((g) => g.result && !g.result.correct)
   const passed = graded.filter((g) => g.result && g.result.correct)
   const pct = answered ? Math.round((score / answered) * 100) : 0
+  const visible = filter === 'missed' ? missed : graded
 
   return (
     <main className="results-main">
@@ -322,13 +338,39 @@ function Results({ deck, history, score, answered, onRestart }) {
           <span className="tally-pass">{passed.length} passed</span>
           <span className="tally-fail">{missed.length} missed</span>
         </div>
-        <button className="primary-btn" onClick={onRestart}>
-          Start new session
-        </button>
+        <div className="results-actions">
+          <button className="primary-btn" onClick={onRestart}>
+            Start new session
+          </button>
+          {missed.length > 0 && (
+            <button
+              className="ghost-btn"
+              onClick={() => onReviewMissed(missed.map((m) => m.qIndex))}
+            >
+              Retake missed only ({missed.length})
+            </button>
+          )}
+        </div>
+        {missed.length > 0 && (
+          <div className="results-filter">
+            <button
+              className={'filter-btn' + (filter === 'all' ? ' filter-btn-active' : '')}
+              onClick={() => setFilter('all')}
+            >
+              All ({graded.length})
+            </button>
+            <button
+              className={'filter-btn' + (filter === 'missed' ? ' filter-btn-active' : '')}
+              onClick={() => setFilter('missed')}
+            >
+              Missed only ({missed.length})
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="results-list">
-        {graded.map(({ qIndex, q, result }) => {
+        {visible.map(({ qIndex, q, result }) => {
           const meta = CATEGORY_META[q.category]
           const isCorrect = result?.correct
           const selectedArr = result?.selectedArr ?? []

@@ -416,6 +416,43 @@
   margin-bottom: 20px;
 }
 
+.results-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.results-filter {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 22px;
+}
+
+.filter-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 999px;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.filter-btn:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.filter-btn-active {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+
 .tally-pass {
   color: var(--success);
 }
