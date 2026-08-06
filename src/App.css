@@ -520,3 +520,219 @@
     font-size: 16px;
   }
 }
+
+/* ---------- phase selector ---------- */
+.phase-selector-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--bg) 0%, #f0ead0 100%);
+}
+
+.topbar-selector {
+  flex-shrink: 0;
+}
+
+.phase-selector {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.phase-selector-card {
+  background: white;
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.phase-selector-card h1 {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.phase-selector-subtitle {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin: 0 0 40px;
+}
+
+.phase-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.phase-option {
+  padding: 36px 20px;
+  border: 2px solid var(--border);
+  background: white;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-family: inherit;
+}
+
+.phase-option:hover {
+  border-color: var(--text);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.phase-option-1 {
+  color: #c1432c;
+}
+
+.phase-option-1:hover {
+  background: #fbeae6;
+}
+
+.phase-option-2 {
+  color: #8b6f47;
+}
+
+.phase-option-2:hover {
+  background: #f5f0e6;
+}
+
+.phase-option-number {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.phase-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.phase-option-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .phase-grid {
+    grid-template-columns: 1fr;
+  }
+  .phase-selector-card {
+    padding: 32px 20px;
+  }
+  .phase-selector-card h1 {
+    font-size: 28px;
+  }
+}
+
+/* ---------- phase selector ---------- */
+.phase-selector {
+  min-height: 100vh;
+  width: 100%;
+  background: linear-gradient(135deg, #f5f3f0 0%, #ede9e3 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.phase-selector-card {
+  background: white;
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+  text-align: center;
+}
+
+.phase-selector-card h1 {
+  font-size: 42px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.phase-selector-subtitle {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin: 0 0 40px;
+}
+
+.phase-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.phase-btn {
+  padding: 32px 20px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.phase-btn:hover {
+  border-color: var(--text);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+.phase-btn-1 {
+  color: #c1432c;
+}
+
+.phase-btn-1:hover {
+  background: #fbeae6;
+}
+
+.phase-btn-2 {
+  color: #6b5b47;
+}
+
+.phase-btn-2:hover {
+  background: #f0e8de;
+}
+
+.phase-btn-label {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.phase-btn-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.phase-btn-count {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+
+@media (max-width: 640px) {
+  .phase-grid {
+    grid-template-columns: 1fr;
+  }
+  .phase-selector-card {
+    padding: 32px 20px;
+  }
+}

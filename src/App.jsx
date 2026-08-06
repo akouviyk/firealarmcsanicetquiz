@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { questions } from '../questions.js'
+import { questionsPhase2 } from './questions-phase2.js'
 import './App.css'
 
-const CATEGORIES = [
+const CATEGORIES_PHASE1 = [
   { key: 'all', label: 'All', color: '#8a8a86' },
   { key: 'code', label: 'Code / NFPA', color: '#c1432c' },
   { key: 'building', label: 'Building / IBC', color: '#b8892b' },
@@ -10,7 +11,10 @@ const CATEGORIES = [
   { key: 'safety', label: 'Safety / HR', color: '#2f7a4f' },
 ]
 
-const CATEGORY_META = Object.fromEntries(CATEGORIES.map((c) => [c.key, c]))
+const CATEGORIES_PHASE2 = [
+  { key: 'all', label: 'All', color: '#8a8a86' },
+  { key: 'nicet', label: 'NICET', color: '#8b6f47' },
+]
 
 const QUESTION_SECONDS = 30
 
@@ -23,10 +27,10 @@ function shuffleArray(arr) {
   return a
 }
 
-function buildDeck(category) {
-  const indices = questions
+function buildDeck(questionSet, category) {
+  const indices = questionSet
     .map((q, i) => i)
-    .filter((i) => category === 'all' || questions[i].category === category)
+    .filter((i) => category === 'all' || questionSet[i].category === category)
   return shuffleArray(indices)
 }
 
@@ -37,8 +41,9 @@ function formatTime(s) {
 }
 
 export default function App() {
+  const [selectedPhase, setSelectedPhase] = useState(null) // null | 'phase1' | 'phase2'
   const [category, setCategory] = useState('all')
-  const [deck, setDeck] = useState(() => buildDeck('all'))
+  const [deck, setDeck] = useState([])
   const [pos, setPos] = useState(0)
   const [selected, setSelected] = useState(new Set())
   const [score, setScore] = useState(0)
@@ -50,15 +55,22 @@ export default function App() {
 
   const submittingRef = useRef(false)
 
+  const activeQuestions = selectedPhase === 'phase2' ? questionsPhase2 : questions
+  const activeCategories = selectedPhase === 'phase2' ? CATEGORIES_PHASE2 : CATEGORIES_PHASE1
+  const CATEGORY_META = Object.fromEntries(activeCategories.map((c) => [c.key, c]))
+
   const currentQIndex = deck.length ? deck[pos % deck.length] : null
-  const current = currentQIndex !== null ? questions[currentQIndex] : null
+  const current = currentQIndex !== null ? activeQuestions[currentQIndex] : null
   const isMulti = current ? current.correct.length > 1 : false
-  const meta = current ? CATEGORY_META[current.category] : CATEGORY_META.all
+  const meta = current ? CATEGORY_META[current.category] : activeCategories[0]
   const isLastCard = pos + 1 >= deck.length
 
-  const resetSession = useCallback((key) => {
-    const d = buildDeck(key)
+  const initPhase = useCallback((phaseKey) => {
+    setSelectedPhase(phaseKey)
+    const questionSet = phaseKey === 'phase2' ? questionsPhase2 : questions
+    const d = buildDeck(questionSet, 'all')
     setDeck(d)
+    setCategory('all')
     setPos(0)
     setSelected(new Set())
     setScore(0)
@@ -68,6 +80,22 @@ export default function App() {
     setTimeLeft(QUESTION_SECONDS)
     submittingRef.current = false
   }, [])
+
+  const resetSession = useCallback(
+    (key) => {
+      const d = buildDeck(activeQuestions, key)
+      setDeck(d)
+      setPos(0)
+      setSelected(new Set())
+      setScore(0)
+      setAnswered(0)
+      setHistory({})
+      setPhase('quiz')
+      setTimeLeft(QUESTION_SECONDS)
+      submittingRef.current = false
+    },
+    [activeQuestions]
+  )
 
   const changeCategory = useCallback(
     (key) => {
@@ -87,6 +115,20 @@ export default function App() {
   const handleRestart = useCallback(() => {
     resetSession(category)
   }, [category, resetSession])
+
+  const handleChangePhase = useCallback(() => {
+    setSelectedPhase(null)
+    setCategory('all')
+    setDeck([])
+    setPos(0)
+    setSelected(new Set())
+    setScore(0)
+    setAnswered(0)
+    setHistory({})
+    setPhase('quiz')
+    setTimeLeft(QUESTION_SECONDS)
+    submittingRef.current = false
+  }, [])
 
   const handleReviewMissed = useCallback((missedIndices) => {
     setDeck(shuffleArray(missedIndices))
@@ -114,8 +156,6 @@ export default function App() {
     })
   }
 
-  // Locks in the current answer (whatever is selected, even nothing) and
-  // advances to the next card without revealing correct/incorrect.
   const submitAnswer = useCallback(() => {
     if (!current || submittingRef.current) return
     submittingRef.current = true
@@ -186,7 +226,12 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  })
+  }, [current, phase, submitAnswer])
+
+  // Phase selection screen
+  if (!selectedPhase) {
+    return <PhaseSelector onSelectPhase={initPhase} />
+  }
 
   const timerLow = timeLeft <= 10
   const progressPct = deck.length ? ((pos) / deck.length) * 100 : 0
@@ -198,7 +243,7 @@ export default function App() {
           <span className="brand">Fire Alarm Quiz</span>
 
           <nav className="category-tabs" aria-label="Category filter">
-            {CATEGORIES.map((c) => (
+            {activeCategories.map((c) => (
               <button
                 key={c.key}
                 className={
@@ -219,6 +264,9 @@ export default function App() {
               <span className="score-sep">/</span>
               <span className="score-total">{answered}</span>
             </div>
+            <button className="ghost-btn" onClick={handleChangePhase}>
+              Change phase
+            </button>
             <button className="ghost-btn" onClick={handleRestart}>
               Restart
             </button>
@@ -300,10 +348,13 @@ export default function App() {
       ) : (
         <Results
           deck={deck}
+          activeQuestions={activeQuestions}
           history={history}
           score={score}
           answered={answered}
+          CATEGORY_META={CATEGORY_META}
           onRestart={handleRestart}
+          onChangePhase={handleChangePhase}
           onReviewMissed={handleReviewMissed}
         />
       )}
@@ -311,12 +362,50 @@ export default function App() {
   )
 }
 
-function Results({ deck, history, score, answered, onRestart, onReviewMissed }) {
+function PhaseSelector({ onSelectPhase }) {
+  return (
+    <div className="phase-selector-wrapper">
+      <header className="topbar topbar-selector">
+        <div className="topbar-inner">
+          <span className="brand">Fire Alarm Quiz</span>
+        </div>
+      </header>
+      <main className="phase-selector">
+        <div className="phase-selector-card">
+          <h1>Choose a quiz</h1>
+          <p className="phase-selector-subtitle">Select the phase to get started</p>
+
+          <div className="phase-grid">
+            <button
+              className="phase-option phase-option-1"
+              onClick={() => onSelectPhase('phase1')}
+            >
+              <div className="phase-option-number">I</div>
+              <div className="phase-option-title">Fundamentals</div>
+              <div className="phase-option-count">76 questions</div>
+            </button>
+
+            <button
+              className="phase-option phase-option-2"
+              onClick={() => onSelectPhase('phase2')}
+            >
+              <div className="phase-option-number">II</div>
+              <div className="phase-option-title">NICET Advanced</div>
+              <div className="phase-option-count">120 questions</div>
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function Results({ deck, activeQuestions, history, score, answered, CATEGORY_META, onRestart, onChangePhase, onReviewMissed }) {
   const [filter, setFilter] = useState('all') // 'all' | 'missed'
 
   const graded = deck.map((qIndex) => ({
     qIndex,
-    q: questions[qIndex],
+    q: activeQuestions[qIndex],
     result: history[qIndex],
   }))
   const missed = graded.filter((g) => g.result && !g.result.correct)
@@ -350,6 +439,9 @@ function Results({ deck, history, score, answered, onRestart, onReviewMissed }) 
               Retake missed only ({missed.length})
             </button>
           )}
+          <button className="ghost-btn" onClick={onChangePhase}>
+            Change phase
+          </button>
         </div>
         {missed.length > 0 && (
           <div className="results-filter">
