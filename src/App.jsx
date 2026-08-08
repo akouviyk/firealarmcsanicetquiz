@@ -52,8 +52,10 @@ export default function App() {
   const [transitioning, setTransitioning] = useState(false)
   const [phase, setPhase] = useState('quiz') // 'quiz' | 'results'
   const [timeLeft, setTimeLeft] = useState(QUESTION_SECONDS)
+  const [isPaused, setIsPaused] = useState(false)
 
   const submittingRef = useRef(false)
+  const isPausedRef = useRef(false)
 
   const activeQuestions = selectedPhase === 'phase2' ? questionsPhase2 : questions
   const activeCategories = selectedPhase === 'phase2' ? CATEGORIES_PHASE2 : CATEGORIES_PHASE1
@@ -78,6 +80,7 @@ export default function App() {
     setHistory({})
     setPhase('quiz')
     setTimeLeft(QUESTION_SECONDS)
+    setIsPaused(false)
     submittingRef.current = false
   }, [])
 
@@ -92,6 +95,7 @@ export default function App() {
       setHistory({})
       setPhase('quiz')
       setTimeLeft(QUESTION_SECONDS)
+      setIsPaused(false)
       submittingRef.current = false
     },
     [activeQuestions]
@@ -110,6 +114,7 @@ export default function App() {
     setPos(0)
     setSelected(new Set())
     setTimeLeft(QUESTION_SECONDS)
+    setIsPaused(false)
   }, [])
 
   const handleRestart = useCallback(() => {
@@ -127,6 +132,7 @@ export default function App() {
     setHistory({})
     setPhase('quiz')
     setTimeLeft(QUESTION_SECONDS)
+    setIsPaused(false)
     submittingRef.current = false
   }, [])
 
@@ -139,10 +145,12 @@ export default function App() {
     setHistory({})
     setPhase('quiz')
     setTimeLeft(QUESTION_SECONDS)
+    setIsPaused(false)
     submittingRef.current = false
   }, [])
 
   const toggleOption = (optIdx) => {
+    if (isPaused) return
     setSelected((prev) => {
       const next = new Set(prev)
       if (isMulti) {
@@ -157,7 +165,7 @@ export default function App() {
   }
 
   const submitAnswer = useCallback(() => {
-    if (!current || submittingRef.current) return
+    if (!current || submittingRef.current || isPaused) return
     submittingRef.current = true
 
     const correctSet = new Set(current.correct)
@@ -189,7 +197,7 @@ export default function App() {
         setPos((p) => p + 1)
       }
     }, 180)
-  }, [current, selected, currentQIndex, isLastCard])
+  }, [current, selected, currentQIndex, isLastCard, isPaused])
 
   const submitAnswerRef = useRef(submitAnswer)
   useEffect(() => {
@@ -200,7 +208,9 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'quiz' || !current) return
     setTimeLeft(QUESTION_SECONDS)
+    setIsPaused(false)
     const interval = setInterval(() => {
+      if (isPausedRef.current) return
       setTimeLeft((t) => {
         if (t <= 1) {
           clearInterval(interval)
@@ -211,6 +221,15 @@ export default function App() {
     }, 1000)
     return () => clearInterval(interval)
   }, [currentQIndex, phase, current])
+
+  useEffect(() => {
+    isPausedRef.current = isPaused
+  }, [isPaused])
+
+  const togglePause = useCallback(() => {
+    if (phase !== 'quiz' || !current || timeLeft === 0) return
+    setIsPaused((p) => !p)
+  }, [phase, current, timeLeft])
 
   // auto-submit when time runs out
   useEffect(() => {
@@ -284,9 +303,14 @@ export default function App() {
         <main className="quiz-main">
           {current ? (
             <div
-              className={'question-card' + (transitioning ? ' question-card-out' : '')}
+              className={'question-card' + (transitioning ? ' question-card-out' : '') + (isPaused ? ' question-card-paused' : '')}
               style={{ '--tab-color': meta.color }}
             >
+              {isPaused && (
+                <div className="paused-overlay">
+                  <span>Paused</span>
+                </div>
+              )}
               <div className="question-meta">
                 <span className="category-chip">
                   <span className="category-dot" />
@@ -299,6 +323,13 @@ export default function App() {
                 <span className={'timer' + (timerLow ? ' timer-low' : '')}>
                   {formatTime(timeLeft)}
                 </span>
+                <button
+                  className="pause-btn"
+                  onClick={togglePause}
+                  aria-label={isPaused ? 'Resume timer' : 'Pause timer'}
+                >
+                  {isPaused ? '▶ Resume' : '⏸ Pause'}
+                </button>
               </div>
 
               <div className="timer-track">
@@ -316,6 +347,7 @@ export default function App() {
                     <button
                       className={'option' + (selected.has(i) ? ' option-selected' : '')}
                       onClick={() => toggleOption(i)}
+                      disabled={isPaused}
                     >
                       <span className="option-marker">
                         {isMulti ? (selected.has(i) ? '☑' : '☐') : (selected.has(i) ? '●' : '○')}
@@ -333,7 +365,7 @@ export default function App() {
                 <button
                   className="primary-btn"
                   onClick={submitAnswer}
-                  disabled={selected.size === 0}
+                  disabled={selected.size === 0 || isPaused}
                 >
                   {isLastCard ? 'Finish quiz' : 'Lock in answer'}
                 </button>
