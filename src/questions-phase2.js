@@ -329,11 +329,11 @@ export const questionsPhase2 = [
     explanation: "Splices must be made in boxes, enclosures, or fire alarm devices—never in walls."
   },
   {
-    q: "The amount of FPLR cable is not sufficient to finish the wiring for the installation of the fire alarm system? What type of cable does the code permit to be used as a substitute?",
+    q: "The amount of  cable is not sufficient to finish the wiring for the installation of the fire alarm system? What type of cable does the code permit to be used as a substitute?",
     options: ["FPL", "FPLP", "CLR", "CM"],
     correct: [1],
     category: "nicet",
-    explanation: "FPLP can be used as a substitute for FPLR when sufficient FPLR is not available."
+    explanation: "FPLP can be used as a substitute for  when sufficient  is not available."
   },
   {
     q: "A 135 degree Fahrenheit fixed temperature heat detector installed in a warehouse has a history of nuisance alarms. According to NFPA 72, the temperature rating of the detector shall be at least ____ degrees Fahrenheit above the maximum expected temperature at the ceiling?",
