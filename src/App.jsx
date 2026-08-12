@@ -5,18 +5,41 @@ import './App.css'
 
 const CATEGORIES_PHASE1 = [
   { key: 'all', label: 'All', color: '#8a8a86' },
-  { key: 'code', label: 'Code / NFPA', color: '#c1432c' },
-  { key: 'building', label: 'Building / IBC', color: '#b8892b' },
-  { key: 'business', label: 'Business / Est.', color: '#2f6fb8' },
-  { key: 'safety', label: 'Safety / HR', color: '#2f7a4f' },
+  { key: 'code', label: 'Code / NFPA', color: '#e63946' },
+  { key: 'building', label: 'Building / IBC', color: '#f59e0b' },
+  { key: 'business', label: 'Business / Est.', color: '#2563eb' },
+  { key: 'safety', label: 'Safety / HR', color: '#16a34a' },
 ]
 
 const CATEGORIES_PHASE2 = [
   { key: 'all', label: 'All', color: '#8a8a86' },
-  { key: 'nicet', label: 'NICET', color: '#8b6f47' },
+  { key: 'nicet', label: 'NICET', color: '#a855f7' },
 ]
 
 const QUESTION_SECONDS = 30
+
+const PHASE2_PART_COUNT = 4
+const PHASE2_PART_COLORS = ['#a855f7', '#2563eb', '#16a34a', '#e63946']
+
+function splitIntoParts(arr, count) {
+  const size = Math.ceil(arr.length / count)
+  const parts = []
+  for (let i = 0; i < count; i++) {
+    const start = i * size
+    const slice = arr.slice(start, start + size)
+    if (slice.length === 0) continue
+    parts.push({
+      key: i,
+      label: `Part ${i + 1}`,
+      range: `Q${start + 1}–${start + slice.length}`,
+      color: PHASE2_PART_COLORS[i % PHASE2_PART_COLORS.length],
+      questions: slice,
+    })
+  }
+  return parts
+}
+
+const PHASE2_PARTS = splitIntoParts(questionsPhase2, PHASE2_PART_COUNT)
 
 function shuffleArray(arr) {
   const a = [...arr]
@@ -42,6 +65,7 @@ function formatTime(s) {
 
 export default function App() {
   const [selectedPhase, setSelectedPhase] = useState(null) // null | 'phase1' | 'phase2'
+  const [phase2Part, setPhase2Part] = useState(null) // null | part index | 'all'
   const [category, setCategory] = useState('all')
   const [deck, setDeck] = useState([])
   const [pos, setPos] = useState(0)
@@ -57,7 +81,12 @@ export default function App() {
   const submittingRef = useRef(false)
   const isPausedRef = useRef(false)
 
-  const activeQuestions = selectedPhase === 'phase2' ? questionsPhase2 : questions
+  const activeQuestions =
+    selectedPhase === 'phase2'
+      ? phase2Part !== null && phase2Part !== 'all'
+        ? PHASE2_PARTS[phase2Part].questions
+        : questionsPhase2
+      : questions
   const activeCategories = selectedPhase === 'phase2' ? CATEGORIES_PHASE2 : CATEGORIES_PHASE1
   const CATEGORY_META = Object.fromEntries(activeCategories.map((c) => [c.key, c]))
 
@@ -66,10 +95,9 @@ export default function App() {
   const isMulti = current ? current.correct.length > 1 : false
   const meta = current ? CATEGORY_META[current.category] : activeCategories[0]
   const isLastCard = pos + 1 >= deck.length
+  const alreadyGraded = currentQIndex !== null && history[currentQIndex] != null
 
-  const initPhase = useCallback((phaseKey) => {
-    setSelectedPhase(phaseKey)
-    const questionSet = phaseKey === 'phase2' ? questionsPhase2 : questions
+  const startQuiz = useCallback((questionSet) => {
     const d = buildDeck(questionSet, 'all')
     setDeck(d)
     setCategory('all')
@@ -83,6 +111,27 @@ export default function App() {
     setIsPaused(false)
     submittingRef.current = false
   }, [])
+
+  const initPhase = useCallback(
+    (phaseKey) => {
+      setSelectedPhase(phaseKey)
+      setPhase2Part(null)
+      if (phaseKey === 'phase1') {
+        startQuiz(questions)
+      }
+      // phase2 waits for a part to be chosen on the part-selector screen
+    },
+    [startQuiz]
+  )
+
+  const selectPhase2Part = useCallback(
+    (partKey) => {
+      setPhase2Part(partKey)
+      const questionSet = partKey === 'all' ? questionsPhase2 : PHASE2_PARTS[partKey].questions
+      startQuiz(questionSet)
+    },
+    [startQuiz]
+  )
 
   const resetSession = useCallback(
     (key) => {
@@ -123,6 +172,22 @@ export default function App() {
 
   const handleChangePhase = useCallback(() => {
     setSelectedPhase(null)
+    setPhase2Part(null)
+    setCategory('all')
+    setDeck([])
+    setPos(0)
+    setSelected(new Set())
+    setScore(0)
+    setAnswered(0)
+    setHistory({})
+    setPhase('quiz')
+    setTimeLeft(QUESTION_SECONDS)
+    setIsPaused(false)
+    submittingRef.current = false
+  }, [])
+
+  const handleChangePart = useCallback(() => {
+    setPhase2Part(null)
     setCategory('all')
     setDeck([])
     setPos(0)
@@ -164,6 +229,22 @@ export default function App() {
     })
   }
 
+  const goToPos = useCallback(
+    (newPos) => {
+      if (newPos < 0 || newPos >= deck.length || newPos === pos) return
+      const qIdx = deck[newPos]
+      const priorSelection = history[qIdx]?.selectedArr
+      setPos(newPos)
+      setSelected(new Set(priorSelection ?? []))
+      setIsPaused(false)
+      submittingRef.current = false
+    },
+    [deck, history, pos]
+  )
+
+  const goPrevious = useCallback(() => goToPos(pos - 1), [pos, goToPos])
+  const goNext = useCallback(() => goToPos(pos + 1), [pos, goToPos])
+
   const submitAnswer = useCallback(() => {
     if (!current || submittingRef.current || isPaused) return
     submittingRef.current = true
@@ -174,8 +255,15 @@ export default function App() {
       correctSet.size === selected.size &&
       [...correctSet].every((c) => selected.has(c))
 
-    setAnswered((a) => a + 1)
-    if (isCorrect) setScore((s) => s + 1)
+    const prior = history[currentQIndex]
+    if (prior) {
+      if (prior.correct !== isCorrect) {
+        setScore((s) => s + (isCorrect ? 1 : -1))
+      }
+    } else {
+      setAnswered((a) => a + 1)
+      if (isCorrect) setScore((s) => s + 1)
+    }
     setHistory((h) => ({
       ...h,
       [currentQIndex]: {
@@ -197,7 +285,7 @@ export default function App() {
         setPos((p) => p + 1)
       }
     }, 180)
-  }, [current, selected, currentQIndex, isLastCard, isPaused])
+  }, [current, selected, currentQIndex, isLastCard, isPaused, history])
 
   const submitAnswerRef = useRef(submitAnswer)
   useEffect(() => {
@@ -252,6 +340,18 @@ export default function App() {
     return <PhaseSelector onSelectPhase={initPhase} />
   }
 
+  // Phase II part selection screen
+  if (selectedPhase === 'phase2' && phase2Part === null) {
+    return (
+      <Phase2PartSelector
+        parts={PHASE2_PARTS}
+        total={questionsPhase2.length}
+        onSelectPart={selectPhase2Part}
+        onBack={handleChangePhase}
+      />
+    )
+  }
+
   const timerLow = timeLeft <= 10
   const progressPct = deck.length ? ((pos) / deck.length) * 100 : 0
 
@@ -259,7 +359,9 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="topbar-inner">
-          <span className="brand">Fire Alarm Quiz</span>
+          <button className="brand brand-home" onClick={handleChangePhase} aria-label="Back to phase selection">
+            <span className="home-icon">⌂</span> Fire Alarm Quiz
+          </button>
 
           <nav className="category-tabs" aria-label="Category filter">
             {activeCategories.map((c) => (
@@ -286,6 +388,11 @@ export default function App() {
             <button className="ghost-btn" onClick={handleChangePhase}>
               Change phase
             </button>
+            {selectedPhase === 'phase2' && (
+              <button className="ghost-btn" onClick={handleChangePart}>
+                Change part
+              </button>
+            )}
             <button className="ghost-btn" onClick={handleRestart}>
               Restart
             </button>
@@ -311,13 +418,23 @@ export default function App() {
                   <span>Paused</span>
                 </div>
               )}
+              <div className="question-nav">
+                <button className="nav-btn" onClick={goPrevious} disabled={pos === 0}>
+                  ‹ Prev
+                </button>
+                <span className="question-count">
+                  Question {pos + 1} of {deck.length}
+                  {alreadyGraded && <span className="answered-badge"> • Answered</span>}
+                </span>
+                <button className="nav-btn" onClick={goNext} disabled={pos === deck.length - 1}>
+                  Next ›
+                </button>
+              </div>
+
               <div className="question-meta">
                 <span className="category-chip">
                   <span className="category-dot" />
                   {meta.label}
-                </span>
-                <span className="question-count">
-                  Question {pos + 1} of {deck.length}
                 </span>
                 {isMulti && <span className="multi-hint">Select all that apply</span>}
                 <span className={'timer' + (timerLow ? ' timer-low' : '')}>
@@ -367,7 +484,7 @@ export default function App() {
                   onClick={submitAnswer}
                   disabled={selected.size === 0 || isPaused}
                 >
-                  {isLastCard ? 'Finish quiz' : 'Lock in answer'}
+                  {isLastCard ? 'Finish quiz' : alreadyGraded ? 'Update answer' : 'Lock in answer'}
                 </button>
               </div>
             </div>
@@ -414,7 +531,7 @@ function PhaseSelector({ onSelectPhase }) {
             >
               <div className="phase-option-number">I</div>
               <div className="phase-option-title">Fundamentals</div>
-              <div className="phase-option-count">76 questions</div>
+              <div className="phase-option-count">{questions.length} questions</div>
             </button>
 
             <button
@@ -423,9 +540,58 @@ function PhaseSelector({ onSelectPhase }) {
             >
               <div className="phase-option-number">II</div>
               <div className="phase-option-title">NICET Advanced</div>
-              <div className="phase-option-count">120 questions</div>
+              <div className="phase-option-count">{questionsPhase2.length} questions</div>
             </button>
           </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function Phase2PartSelector({ parts, total, onSelectPart, onBack }) {
+  return (
+    <div className="phase-selector-wrapper">
+      <header className="topbar topbar-selector">
+        <div className="topbar-inner">
+          <span className="brand">Fire Alarm Quiz</span>
+        </div>
+      </header>
+      <main className="phase-selector">
+        <div className="phase-selector-card">
+          <h1>Phase II — NICET Advanced</h1>
+          <p className="phase-selector-subtitle">
+            Split into {parts.length} parts of ~{parts[0].questions.length} questions each, or take all {total} at once
+          </p>
+
+          <div className="phase-grid part-grid">
+            {parts.map((part) => (
+              <button
+                key={part.key}
+                className="phase-option part-option"
+                style={{ '--tab-color': part.color }}
+                onClick={() => onSelectPart(part.key)}
+              >
+                <div className="phase-option-number">{part.key + 1}</div>
+                <div className="phase-option-title">{part.label}</div>
+                <div className="phase-option-count">
+                  {part.questions.length} questions ({part.range})
+                </div>
+              </button>
+            ))}
+            <button
+              className="phase-option part-option part-option-all"
+              onClick={() => onSelectPart('all')}
+            >
+              <div className="phase-option-number">∗</div>
+              <div className="phase-option-title">All parts</div>
+              <div className="phase-option-count">{total} questions</div>
+            </button>
+          </div>
+
+          <button className="text-btn part-back-btn" onClick={onBack}>
+            ← Back to phase selection
+          </button>
         </div>
       </main>
     </div>
