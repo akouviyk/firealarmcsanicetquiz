@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { questions } from '../questions.js'
-import { questionsPhase2 } from './questions-phase2.js'
+import { questionsPhase2 } from './questionsPhase2_with_lookup.js'
 import './App.css'
 
 const CATEGORIES_PHASE1 = [
@@ -16,7 +16,8 @@ const CATEGORIES_PHASE2 = [
   { key: 'nicet', label: 'NICET', color: '#a855f7' },
 ]
 
-const QUESTION_SECONDS = 30
+const PHASE1_SECONDS = 30
+const PHASE2_SECONDS = 60
 
 const PHASE2_PART_COUNT = 4
 const PHASE2_PART_COLORS = ['#a855f7', '#2563eb', '#16a34a', '#e63946']
@@ -40,6 +41,12 @@ function splitIntoParts(arr, count) {
 }
 
 const PHASE2_PARTS = splitIntoParts(questionsPhase2, PHASE2_PART_COUNT)
+
+// Points a given question is worth: 1 for a plain question, 3 if it has a
+// lookup block (answer + book + location), each graded independently.
+function maxPointsFor(q) {
+  return q.lookup ? 3 : 1
+}
 
 function shuffleArray(arr) {
   const a = [...arr]
@@ -70,12 +77,15 @@ export default function App() {
   const [deck, setDeck] = useState([])
   const [pos, setPos] = useState(0)
   const [selected, setSelected] = useState(new Set())
-  const [score, setScore] = useState(0)
-  const [answered, setAnswered] = useState(0)
+  const [selectedBook, setSelectedBook] = useState(null)
+  const [selectedLocation, setSelectedLocation] = useState(null)
+  const [score, setScore] = useState(0) // points earned
+  const [totalPoints, setTotalPoints] = useState(0) // points possible, for questions answered so far
+  const [answered, setAnswered] = useState(0) // question count answered
   const [history, setHistory] = useState({})
   const [transitioning, setTransitioning] = useState(false)
   const [phase, setPhase] = useState('quiz') // 'quiz' | 'results'
-  const [timeLeft, setTimeLeft] = useState(QUESTION_SECONDS)
+  const [timeLeft, setTimeLeft] = useState(PHASE1_SECONDS)
   const [isPaused, setIsPaused] = useState(false)
 
   const submittingRef = useRef(false)
@@ -89,25 +99,34 @@ export default function App() {
       : questions
   const activeCategories = selectedPhase === 'phase2' ? CATEGORIES_PHASE2 : CATEGORIES_PHASE1
   const CATEGORY_META = Object.fromEntries(activeCategories.map((c) => [c.key, c]))
+  const questionSeconds = selectedPhase === 'phase2' ? PHASE2_SECONDS : PHASE1_SECONDS
 
   const currentQIndex = deck.length ? deck[pos % deck.length] : null
   const current = currentQIndex !== null ? activeQuestions[currentQIndex] : null
   const isMulti = current ? current.correct.length > 1 : false
+  const hasLookup = !!current?.lookup
   const meta = current ? CATEGORY_META[current.category] : activeCategories[0]
   const isLastCard = pos + 1 >= deck.length
   const alreadyGraded = currentQIndex !== null && history[currentQIndex] != null
 
-  const startQuiz = useCallback((questionSet) => {
+  const resetAnswerState = () => {
+    setSelected(new Set())
+    setSelectedBook(null)
+    setSelectedLocation(null)
+  }
+
+  const startQuiz = useCallback((questionSet, phaseKey) => {
     const d = buildDeck(questionSet, 'all')
     setDeck(d)
     setCategory('all')
     setPos(0)
-    setSelected(new Set())
+    resetAnswerState()
     setScore(0)
+    setTotalPoints(0)
     setAnswered(0)
     setHistory({})
     setPhase('quiz')
-    setTimeLeft(QUESTION_SECONDS)
+    setTimeLeft(phaseKey === 'phase2' ? PHASE2_SECONDS : PHASE1_SECONDS)
     setIsPaused(false)
     submittingRef.current = false
   }, [])
@@ -117,7 +136,7 @@ export default function App() {
       setSelectedPhase(phaseKey)
       setPhase2Part(null)
       if (phaseKey === 'phase1') {
-        startQuiz(questions)
+        startQuiz(questions, 'phase1')
       }
       // phase2 waits for a part to be chosen on the part-selector screen
     },
@@ -128,7 +147,7 @@ export default function App() {
     (partKey) => {
       setPhase2Part(partKey)
       const questionSet = partKey === 'all' ? questionsPhase2 : PHASE2_PARTS[partKey].questions
-      startQuiz(questionSet)
+      startQuiz(questionSet, 'phase2')
     },
     [startQuiz]
   )
@@ -138,16 +157,17 @@ export default function App() {
       const d = buildDeck(activeQuestions, key)
       setDeck(d)
       setPos(0)
-      setSelected(new Set())
+      resetAnswerState()
       setScore(0)
+      setTotalPoints(0)
       setAnswered(0)
       setHistory({})
       setPhase('quiz')
-      setTimeLeft(QUESTION_SECONDS)
+      setTimeLeft(questionSeconds)
       setIsPaused(false)
       submittingRef.current = false
     },
-    [activeQuestions]
+    [activeQuestions, questionSeconds]
   )
 
   const changeCategory = useCallback(
@@ -161,10 +181,10 @@ export default function App() {
   const handleShuffle = useCallback(() => {
     setDeck((d) => shuffleArray(d))
     setPos(0)
-    setSelected(new Set())
-    setTimeLeft(QUESTION_SECONDS)
+    resetAnswerState()
+    setTimeLeft(questionSeconds)
     setIsPaused(false)
-  }, [])
+  }, [questionSeconds])
 
   const handleRestart = useCallback(() => {
     resetSession(category)
@@ -176,12 +196,13 @@ export default function App() {
     setCategory('all')
     setDeck([])
     setPos(0)
-    setSelected(new Set())
+    resetAnswerState()
     setScore(0)
+    setTotalPoints(0)
     setAnswered(0)
     setHistory({})
     setPhase('quiz')
-    setTimeLeft(QUESTION_SECONDS)
+    setTimeLeft(PHASE1_SECONDS)
     setIsPaused(false)
     submittingRef.current = false
   }, [])
@@ -191,12 +212,13 @@ export default function App() {
     setCategory('all')
     setDeck([])
     setPos(0)
-    setSelected(new Set())
+    resetAnswerState()
     setScore(0)
+    setTotalPoints(0)
     setAnswered(0)
     setHistory({})
     setPhase('quiz')
-    setTimeLeft(QUESTION_SECONDS)
+    setTimeLeft(PHASE2_SECONDS)
     setIsPaused(false)
     submittingRef.current = false
   }, [])
@@ -204,15 +226,16 @@ export default function App() {
   const handleReviewMissed = useCallback((missedIndices) => {
     setDeck(shuffleArray(missedIndices))
     setPos(0)
-    setSelected(new Set())
+    resetAnswerState()
     setScore(0)
+    setTotalPoints(0)
     setAnswered(0)
     setHistory({})
     setPhase('quiz')
-    setTimeLeft(QUESTION_SECONDS)
+    setTimeLeft(questionSeconds)
     setIsPaused(false)
     submittingRef.current = false
-  }, [])
+  }, [questionSeconds])
 
   const toggleOption = (optIdx) => {
     if (isPaused) return
@@ -229,13 +252,25 @@ export default function App() {
     })
   }
 
+  const chooseBook = (idx) => {
+    if (isPaused) return
+    setSelectedBook(idx)
+  }
+
+  const chooseLocation = (idx) => {
+    if (isPaused) return
+    setSelectedLocation(idx)
+  }
+
   const goToPos = useCallback(
     (newPos) => {
       if (newPos < 0 || newPos >= deck.length || newPos === pos) return
       const qIdx = deck[newPos]
-      const priorSelection = history[qIdx]?.selectedArr
+      const prior = history[qIdx]
       setPos(newPos)
-      setSelected(new Set(priorSelection ?? []))
+      setSelected(new Set(prior?.selectedArr ?? []))
+      setSelectedBook(prior?.selectedBook ?? null)
+      setSelectedLocation(prior?.selectedLocation ?? null)
       setIsPaused(false)
       submittingRef.current = false
     },
@@ -255,28 +290,48 @@ export default function App() {
       correctSet.size === selected.size &&
       [...correctSet].every((c) => selected.has(c))
 
+    let bookCorrect = null
+    let locationCorrect = null
+    let points = isCorrect ? 1 : 0
+    const maxPoints = maxPointsFor(current)
+
+    if (current.lookup) {
+      const bookCorrectSet = new Set(current.lookup.book.correct)
+      const locationCorrectSet = new Set(current.lookup.location.correct)
+      bookCorrect = selectedBook !== null && bookCorrectSet.has(selectedBook)
+      locationCorrect = selectedLocation !== null && locationCorrectSet.has(selectedLocation)
+      points += (bookCorrect ? 1 : 0) + (locationCorrect ? 1 : 0)
+    }
+
     const prior = history[currentQIndex]
     if (prior) {
-      if (prior.correct !== isCorrect) {
-        setScore((s) => s + (isCorrect ? 1 : -1))
-      }
+      setScore((s) => s - prior.points + points)
+      // totalPoints for this question was already counted, maxPoints doesn't change
     } else {
       setAnswered((a) => a + 1)
-      if (isCorrect) setScore((s) => s + 1)
+      setScore((s) => s + points)
+      setTotalPoints((t) => t + maxPoints)
     }
+
     setHistory((h) => ({
       ...h,
       [currentQIndex]: {
         qIndex: currentQIndex,
         correct: isCorrect,
+        bookCorrect,
+        locationCorrect,
+        points,
+        maxPoints,
         selectedArr: [...selected],
+        selectedBook,
+        selectedLocation,
       },
     }))
 
     const wasLast = isLastCard
     setTransitioning(true)
     setTimeout(() => {
-      setSelected(new Set())
+      resetAnswerState()
       setTransitioning(false)
       submittingRef.current = false
       if (wasLast) {
@@ -285,7 +340,7 @@ export default function App() {
         setPos((p) => p + 1)
       }
     }, 180)
-  }, [current, selected, currentQIndex, isLastCard, isPaused, history])
+  }, [current, selected, selectedBook, selectedLocation, currentQIndex, isLastCard, isPaused, history])
 
   const submitAnswerRef = useRef(submitAnswer)
   useEffect(() => {
@@ -295,7 +350,7 @@ export default function App() {
   // per-card countdown timer
   useEffect(() => {
     if (phase !== 'quiz' || !current) return
-    setTimeLeft(QUESTION_SECONDS)
+    setTimeLeft(questionSeconds)
     setIsPaused(false)
     const interval = setInterval(() => {
       if (isPausedRef.current) return
@@ -308,7 +363,7 @@ export default function App() {
       })
     }, 1000)
     return () => clearInterval(interval)
-  }, [currentQIndex, phase, current])
+  }, [currentQIndex, phase, current, questionSeconds])
 
   useEffect(() => {
     isPausedRef.current = isPaused
@@ -354,6 +409,8 @@ export default function App() {
 
   const timerLow = timeLeft <= 10
   const progressPct = deck.length ? ((pos) / deck.length) * 100 : 0
+  const canSubmit =
+    selected.size > 0 && (!hasLookup || (selectedBook !== null && selectedLocation !== null))
 
   return (
     <div className="app">
@@ -383,7 +440,7 @@ export default function App() {
             <div className="score-pill">
               <span className="score-value">{score}</span>
               <span className="score-sep">/</span>
-              <span className="score-total">{answered}</span>
+              <span className="score-total">{totalPoints}</span>
             </div>
             <button className="ghost-btn" onClick={handleChangePhase}>
               Change phase
@@ -437,6 +494,7 @@ export default function App() {
                   {meta.label}
                 </span>
                 {isMulti && <span className="multi-hint">Select all that apply</span>}
+                {hasLookup && <span className="lookup-hint">Worth 3 points</span>}
                 <span className={'timer' + (timerLow ? ' timer-low' : '')}>
                   {formatTime(timeLeft)}
                 </span>
@@ -452,7 +510,7 @@ export default function App() {
               <div className="timer-track">
                 <div
                   className={'timer-fill' + (timerLow ? ' timer-fill-low' : '')}
-                  style={{ width: `${(timeLeft / QUESTION_SECONDS) * 100}%` }}
+                  style={{ width: `${(timeLeft / questionSeconds) * 100}%` }}
                 />
               </div>
 
@@ -475,6 +533,48 @@ export default function App() {
                 ))}
               </ul>
 
+              {hasLookup && (
+                <div className="lookup-block">
+                  <div className="lookup-block-title">Now identify the source</div>
+
+                  <div className="lookup-group">
+                    <div className="lookup-group-title">Which book / standard is this from?</div>
+                    <ul className="options options-compact">
+                      {current.lookup.book.options.map((opt, i) => (
+                        <li key={i}>
+                          <button
+                            className={'option' + (selectedBook === i ? ' option-selected' : '')}
+                            onClick={() => chooseBook(i)}
+                            disabled={isPaused}
+                          >
+                            <span className="option-marker">{selectedBook === i ? '●' : '○'}</span>
+                            <span className="option-text">{opt}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="lookup-group">
+                    <div className="lookup-group-title">Where in the source is it found?</div>
+                    <ul className="options options-compact">
+                      {current.lookup.location.options.map((opt, i) => (
+                        <li key={i}>
+                          <button
+                            className={'option' + (selectedLocation === i ? ' option-selected' : '')}
+                            onClick={() => chooseLocation(i)}
+                            disabled={isPaused}
+                          >
+                            <span className="option-marker">{selectedLocation === i ? '●' : '○'}</span>
+                            <span className="option-text">{opt}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
               <div className="card-actions">
                 <button className="text-btn" onClick={handleShuffle}>
                   Shuffle deck
@@ -482,7 +582,7 @@ export default function App() {
                 <button
                   className="primary-btn"
                   onClick={submitAnswer}
-                  disabled={selected.size === 0 || isPaused}
+                  disabled={!canSubmit || isPaused}
                 >
                   {isLastCard ? 'Finish quiz' : alreadyGraded ? 'Update answer' : 'Lock in answer'}
                 </button>
@@ -500,6 +600,7 @@ export default function App() {
           activeQuestions={activeQuestions}
           history={history}
           score={score}
+          totalPoints={totalPoints}
           answered={answered}
           CATEGORY_META={CATEGORY_META}
           onRestart={handleRestart}
@@ -540,7 +641,7 @@ function PhaseSelector({ onSelectPhase }) {
             >
               <div className="phase-option-number">II</div>
               <div className="phase-option-title">NICET Advanced</div>
-              <div className="phase-option-count">{questionsPhase2.length} questions</div>
+              <div className="phase-option-count">{questionsPhase2.length} questions · with source lookup</div>
             </button>
           </div>
         </div>
@@ -561,7 +662,8 @@ function Phase2PartSelector({ parts, total, onSelectPart, onBack }) {
         <div className="phase-selector-card">
           <h1>Phase II — NICET Advanced</h1>
           <p className="phase-selector-subtitle">
-            Split into {parts.length} parts of ~{parts[0].questions.length} questions each, or take all {total} at once
+            Split into {parts.length} parts of ~{parts[0].questions.length} questions each, or take all {total} at once.
+            Each question also asks you to identify the source book and section.
           </p>
 
           <div className="phase-grid part-grid">
@@ -598,7 +700,7 @@ function Phase2PartSelector({ parts, total, onSelectPart, onBack }) {
   )
 }
 
-function Results({ deck, activeQuestions, history, score, answered, CATEGORY_META, onRestart, onChangePhase, onReviewMissed }) {
+function Results({ deck, activeQuestions, history, score, totalPoints, answered, CATEGORY_META, onRestart, onChangePhase, onReviewMissed }) {
   const [filter, setFilter] = useState('all') // 'all' | 'missed'
 
   const graded = deck.map((qIndex) => ({
@@ -606,9 +708,9 @@ function Results({ deck, activeQuestions, history, score, answered, CATEGORY_MET
     q: activeQuestions[qIndex],
     result: history[qIndex],
   }))
-  const missed = graded.filter((g) => g.result && !g.result.correct)
-  const passed = graded.filter((g) => g.result && g.result.correct)
-  const pct = answered ? Math.round((score / answered) * 100) : 0
+  const missed = graded.filter((g) => g.result && g.result.points < g.result.maxPoints)
+  const passed = graded.filter((g) => g.result && g.result.points === g.result.maxPoints)
+  const pct = totalPoints ? Math.round((score / totalPoints) * 100) : 0
   const visible = filter === 'missed' ? missed : graded
 
   return (
@@ -618,12 +720,12 @@ function Results({ deck, activeQuestions, history, score, answered, CATEGORY_MET
         <div className="results-score">
           <span className="results-score-value">{pct}%</span>
           <span className="results-score-detail">
-            {score} / {answered} correct
+            {score} / {totalPoints} points · {answered} questions
           </span>
         </div>
         <div className="results-tally">
-          <span className="tally-pass">{passed.length} passed</span>
-          <span className="tally-fail">{missed.length} missed</span>
+          <span className="tally-pass">{passed.length} full credit</span>
+          <span className="tally-fail">{missed.length} lost points</span>
         </div>
         <div className="results-actions">
           <button className="primary-btn" onClick={onRestart}>
@@ -653,7 +755,7 @@ function Results({ deck, activeQuestions, history, score, answered, CATEGORY_MET
               className={'filter-btn' + (filter === 'missed' ? ' filter-btn-active' : '')}
               onClick={() => setFilter('missed')}
             >
-              Missed only ({missed.length})
+              Lost points ({missed.length})
             </button>
           </div>
         )}
@@ -662,12 +764,12 @@ function Results({ deck, activeQuestions, history, score, answered, CATEGORY_MET
       <div className="results-list">
         {visible.map(({ qIndex, q, result }) => {
           const meta = CATEGORY_META[q.category]
-          const isCorrect = result?.correct
+          const fullCredit = result && result.points === result.maxPoints
           const selectedArr = result?.selectedArr ?? []
           return (
             <div
               key={qIndex}
-              className={'result-card' + (isCorrect ? ' result-pass' : ' result-fail')}
+              className={'result-card' + (fullCredit ? ' result-pass' : ' result-fail')}
               style={{ '--tab-color': meta.color }}
             >
               <div className="question-meta">
@@ -675,8 +777,10 @@ function Results({ deck, activeQuestions, history, score, answered, CATEGORY_MET
                   <span className="category-dot" />
                   {meta.label}
                 </span>
-                <span className={'result-status' + (isCorrect ? ' status-pass' : ' status-fail')}>
-                  {isCorrect ? 'Passed' : selectedArr.length ? 'Missed' : 'No answer — timed out'}
+                <span className={'result-status' + (fullCredit ? ' status-pass' : ' status-fail')}>
+                  {result
+                    ? `${result.points} / ${result.maxPoints} pts`
+                    : 'No answer — timed out'}
                 </span>
               </div>
               <p className="question-text">{q.q}</p>
@@ -697,6 +801,59 @@ function Results({ deck, activeQuestions, history, score, answered, CATEGORY_MET
                   )
                 })}
               </ul>
+
+              {q.lookup && (
+                <div className="lookup-block lookup-block-results">
+                  <div className="lookup-block-title">Source</div>
+
+                  <div className="lookup-group">
+                    <div className="lookup-group-title">Book / standard</div>
+                    <ul className="options options-compact">
+                      {q.lookup.book.options.map((opt, i) => {
+                        const wasSelected = result?.selectedBook === i
+                        const isCorrectOpt = q.lookup.book.correct.includes(i)
+                        let cls = ''
+                        if (isCorrectOpt) cls = 'option-correct'
+                        else if (wasSelected) cls = 'option-incorrect'
+                        return (
+                          <li key={i}>
+                            <div className={'option option-static ' + cls}>
+                              <span className="option-marker">{wasSelected ? '●' : '○'}</span>
+                              <span className="option-text">{opt}</span>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+
+                  <div className="lookup-group">
+                    <div className="lookup-group-title">Section / location</div>
+                    <ul className="options options-compact">
+                      {q.lookup.location.options.map((opt, i) => {
+                        const wasSelected = result?.selectedLocation === i
+                        const isCorrectOpt = q.lookup.location.correct.includes(i)
+                        let cls = ''
+                        if (isCorrectOpt) cls = 'option-correct'
+                        else if (wasSelected) cls = 'option-incorrect'
+                        return (
+                          <li key={i}>
+                            <div className={'option option-static ' + cls}>
+                              <span className="option-marker">{wasSelected ? '●' : '○'}</span>
+                              <span className="option-text">{opt}</span>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+
+                  {q.lookup.reference && (
+                    <p className="lookup-reference">Reference: {q.lookup.reference}</p>
+                  )}
+                </div>
+              )}
+
               <p className="explanation">{q.explanation}</p>
             </div>
           )
